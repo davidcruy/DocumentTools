@@ -12,7 +12,7 @@ namespace DocumentTools.Tests
         {
             var path = @"C:\Git\DocumentTools\src\Aranea.DocumentTools.Tests";
             var inputContent = File.ReadAllBytes(Path.Combine(path, "sample.docx"));
-            IDocumentWrapper wrapper = new DocumentWrapper(inputContent);
+            var wrapper = new DocxWrapper(inputContent);
 
             Assert.AreEqual(wrapper.GetNumberOfPages(), 2);
 

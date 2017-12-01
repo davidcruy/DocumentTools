@@ -6,11 +6,11 @@ using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocumentTools.Word
 {
-    public class DocumentWrapper : IDocumentWrapper
+    public class DocxWrapper
     {
         private readonly WordprocessingDocument _innerDocument;
 
-        public DocumentWrapper(byte[] content)
+        public DocxWrapper(byte[] content)
         {
             var stream = new MemoryStream();
             stream.Write(content, 0, content.Length);
@@ -19,7 +19,7 @@ namespace DocumentTools.Word
             _innerDocument = WordprocessingDocument.Open(stream, true);
         }
 
-        public DocumentWrapper(Stream documentData)
+        public DocxWrapper(Stream documentData)
         {
             _innerDocument = WordprocessingDocument.Open(documentData, true);
         }

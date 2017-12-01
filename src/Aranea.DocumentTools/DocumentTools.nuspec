@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>DocumentTools</id>
+    <version>$version$</version>
+    <title>$title$</title>
+    <authors>David Cru</authors>
+    <owners>David Cru</owners>
+    <!--<licenseUrl>http://LICENSE_URL_HERE_OR_DELETE_THIS_LINE</licenseUrl>-->
+    <projectUrl>https://github.com/davidcruy/DocumentTools</projectUrl>
+    <!--<iconUrl>http://ICON_URL_HERE_OR_DELETE_THIS_LINE</iconUrl>-->
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Document wrapper that simplifies document management with OpenXml</description>
+    <releaseNotes>Summary of changes made in this release of the package.</releaseNotes>
+    <copyright>Copyright 2017 Aranea</copyright>
+    <tags>doc docx office</tags>
+    <dependencies>
+      <dependency id="DocumentFormat.OpenXml" version="2.7.2" />
+    </dependencies>
+    <packageTypes>
+      <packageType name="Dependency" />
+    </packageTypes>
+  </metadata>
+</package>

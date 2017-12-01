@@ -51,8 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Word\DocumentWrapper.cs" />
-    <Compile Include="Word\IDocumentWrapper.cs" />
+    <Compile Include="Word\DocxWrapper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
