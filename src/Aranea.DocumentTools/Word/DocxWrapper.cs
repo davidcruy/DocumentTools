@@ -90,16 +90,40 @@ namespace DocumentTools.Word
 
         public void MergeData(IDictionary<string, object> values)
         {
+            EnsureMergeFieldMap();
+
             foreach (var value in values)
             {
-                if (!_mergeFieldMap.ContainsKey(value.Key)) continue;
+                if (_mergeFieldMap.ContainsKey(value.Key))
+                {
+                    var field = _mergeFieldMap[value.Key];
+                    var fieldStart = field.PreviousSibling();
+                    var parent = field.Parent;
+                    field.Remove();
 
-                var field = _mergeFieldMap[value.Key];
-                var fieldStart = field.PreviousSibling();
-                var parent = field.Parent;
-                field.Remove();
+                    parent.InsertAfter(new Run(new Text(value.Value.ToString())), fieldStart);
+                }
+                else if (_mergeFieldComplexMap.ContainsKey(value.Key))
+                {
+                    var field = _mergeFieldComplexMap[value.Key];
 
-                parent.InsertAfter(new Run(new Text(value.Value.ToString())), fieldStart);
+                    var rFldCode = (Run)field.Parent;
+                    var rBegin = rFldCode.PreviousSibling<Run>();
+                    var rSep = rFldCode.NextSibling<Run>();
+                    var rText = rSep.NextSibling<Run>();
+                    var rEnd = rText.NextSibling<Run>();
+
+                    rFldCode.Remove();
+                    rBegin.Remove();
+                    rSep.Remove();
+                    rEnd.Remove();
+
+                    var t = rText.GetFirstChild<Text>();
+                    if (t != null)
+                    {
+                        t.Text = value.Value.ToString();
+                    }
+                }
             }
         }
 
@@ -109,6 +133,7 @@ namespace DocumentTools.Word
         }
 
         private IDictionary<string, SimpleField> _mergeFieldMap;
+        private IDictionary<string, FieldCode> _mergeFieldComplexMap;
         private void EnsureMergeFieldMap()
         {
             if (_mergeFieldMap != null) return;
@@ -124,6 +149,20 @@ namespace DocumentTools.Word
                 if (split.Length >= 2 && split[0] == "MERGEFIELD")
                 {
                     _mergeFieldMap.Add(split[1], fieldStart);
+                }
+            }
+
+            _mergeFieldComplexMap = new Dictionary<string, FieldCode>();
+
+            foreach (var fieldStart in _innerDocument.MainDocumentPart.RootElement.Descendants<FieldCode>())
+            {
+                var split = fieldStart.InnerText
+                    .Trim()
+                    .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+                if (split.Length >= 2 && split[0] == "MERGEFIELD")
+                {
+                    _mergeFieldComplexMap.Add(split[1], fieldStart);
                 }
             }
         }
