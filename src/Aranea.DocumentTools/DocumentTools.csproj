@@ -52,6 +52,9 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Word\DocxWrapper.cs" />
+    <Compile Include="Word\ComplexMergeField.cs" />
+    <Compile Include="Word\MergeField.cs" />
+    <Compile Include="Word\SimpleMergeField.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

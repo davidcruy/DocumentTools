@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
+using System.Linq;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -76,95 +79,116 @@ namespace DocumentTools.Word
             return docBytes;
         }
 
-        public byte[] GetContentPDF()
-        {
-            throw new NotImplementedException();
-        }
-
         public bool HasMergeField(string name)
         {
-            EnsureMergeFieldMap();
-
-            return _mergeFieldMap.ContainsKey(name);
+            return GetMergeFields(_innerDocument.MainDocumentPart.RootElement).ContainsKey(name);
         }
 
-        public void MergeData(IDictionary<string, object> values)
+        public void MergeDataSet(DataSet dataSet)
         {
-            EnsureMergeFieldMap();
+            var map = GetMergeFields(_innerDocument.MainDocumentPart.RootElement);
+
+            foreach (DataTable table in dataSet.Tables)
+            {
+                var startKey = $"TableStart:{table.TableName}";
+                var endKey = $"TableEnd:{table.TableName}";
+
+                IMergeField start = null;
+                if (map.ContainsKey(startKey))
+                {
+                    start = map[startKey];
+                }
+
+                IMergeField target = null;
+                if (map.ContainsKey(endKey))
+                {
+                    target = map[endKey];
+                }
+
+                if (start == null || target == null)
+                    return; // Stop building table if start or end doesn't exist
+
+                Console.WriteLine("start & end have been found");
+
+                // Find matching parent...
+                var startRow = start.Parent<TableRow>();
+                var targetRow = target.Parent<TableRow>();
+
+                if (startRow == null || targetRow == null)
+                {
+                    return;
+                }
+                if (startRow == targetRow)
+                {
+                    var cloneRow = startRow.CloneNode(true);
+
+                    foreach (DataRow row in table.Rows)
+                    {
+                        var values = row.Table.Columns
+                            .Cast<DataColumn>()
+                            .ToDictionary(c => c.ColumnName, c => row[c]);
+
+                        values.Add(startKey, "");
+                        values.Add(endKey, "");
+
+                        var isFirst = table.Rows.IndexOf(row) == 0;
+                        if (isFirst)
+                        {
+                            MergeData(values, startRow);
+                        }
+                        else
+                        {
+                            var result = startRow.Parent.InsertAfter(cloneRow.CloneNode(true), startRow);
+                            MergeData(values, result);
+                        }
+                    }
+                }
+                else
+                {
+                    throw new Exception("Table-merging currently is only supported when table-start and end is inside the same table row...");
+                }
+            }
+        }
+
+        public void MergeData<T>(T value)
+        {
+            var values = new Dictionary<string, object>();
+
+            foreach (var prop in value.GetType().GetProperties())
+            {
+                values.Add(prop.Name, prop.GetValue(value, null));
+            }
+
+            MergeData(values, _innerDocument.MainDocumentPart.RootElement);
+        }
+
+        private void MergeData(IDictionary<string, object> values, OpenXmlElement startElement)
+        {
+            var mergeFieldMap = GetMergeFields(startElement);
 
             foreach (var value in values)
             {
-                if (_mergeFieldMap.ContainsKey(value.Key))
-                {
-                    var field = _mergeFieldMap[value.Key];
-                    var fieldStart = field.PreviousSibling();
-                    var parent = field.Parent;
-                    field.Remove();
+                if (!mergeFieldMap.ContainsKey(value.Key)) continue;
 
-                    parent.InsertAfter(new Run(new Text(value.Value.ToString())), fieldStart);
-                }
-                else if (_mergeFieldComplexMap.ContainsKey(value.Key))
-                {
-                    var field = _mergeFieldComplexMap[value.Key];
-
-                    var rFldCode = (Run)field.Parent;
-                    var rBegin = rFldCode.PreviousSibling<Run>();
-                    var rSep = rFldCode.NextSibling<Run>();
-                    var rText = rSep.NextSibling<Run>();
-                    var rEnd = rText.NextSibling<Run>();
-
-                    rFldCode.Remove();
-                    rBegin.Remove();
-                    rSep.Remove();
-                    rEnd.Remove();
-
-                    var t = rText.GetFirstChild<Text>();
-                    if (t != null)
-                    {
-                        t.Text = value.Value.ToString();
-                    }
-                }
+                mergeFieldMap[value.Key].Merge(value.Value);
             }
         }
 
-        public void MergeData(string key, object value)
+        private static IDictionary<string, IMergeField> GetMergeFields(OpenXmlElement startElement)
         {
-            MergeData(new Dictionary<string, object> { { key, value } });
-        }
+            var map = new Dictionary<string, IMergeField>();
 
-        private IDictionary<string, SimpleField> _mergeFieldMap;
-        private IDictionary<string, FieldCode> _mergeFieldComplexMap;
-        private void EnsureMergeFieldMap()
-        {
-            if (_mergeFieldMap != null) return;
-
-            _mergeFieldMap = new Dictionary<string, SimpleField>();
-
-            foreach (var fieldStart in _innerDocument.MainDocumentPart.RootElement.Descendants<SimpleField>())
+            foreach (var fieldStart in startElement.Descendants<FieldCode>())
             {
-                var split = fieldStart.Instruction.Value
-                    .Trim()
-                    .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-
-                if (split.Length >= 2 && split[0] == "MERGEFIELD")
-                {
-                    _mergeFieldMap.Add(split[1], fieldStart);
-                }
+                if (ComplexMergeField.TryParse(fieldStart, out var field)) map.Add(field.Key, field);
             }
 
-            _mergeFieldComplexMap = new Dictionary<string, FieldCode>();
-
-            foreach (var fieldStart in _innerDocument.MainDocumentPart.RootElement.Descendants<FieldCode>())
+            foreach (var fieldStart in startElement.Descendants<SimpleField>())
             {
-                var split = fieldStart.InnerText
-                    .Trim()
-                    .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-
-                if (split.Length >= 2 && split[0] == "MERGEFIELD")
-                {
-                    _mergeFieldComplexMap.Add(split[1], fieldStart);
-                }
+                if (SimpleMergeField.TryParse(fieldStart, out var field)) map.Add(field.Key, field);
             }
+
+            return map;
         }
 
         public int GetNumberOfPages()

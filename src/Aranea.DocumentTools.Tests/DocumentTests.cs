@@ -22,7 +22,11 @@ namespace DocumentTools.Tests
             Assert.IsTrue(wrapper.HasMergeField("MergeMe"));
             Assert.IsFalse(wrapper.HasMergeField("IDontExist"));
 
-            wrapper.MergeData("MergeMe", "WithME!");
+            wrapper.MergeData(
+                new
+                {
+                    MergeMe = "WithME!"
+                });
 
             var content = wrapper.GetContent();
 
