@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
 using DocumentFormat.OpenXml;
@@ -29,44 +30,92 @@ namespace DocumentTools.Word
 
         public void ReplaceBookmark(string bookmarkName, string text)
         {
-            EnsureBookmarkMap();
+            if (!TryFindBookmark(bookmarkName, out BookmarkStart start, out BookmarkEnd end)) return;
 
-            if (!_bookmarkMap.ContainsKey(bookmarkName)) return;
+            var previous = start.PreviousSibling();
+            var parent = start.Parent;
 
-            var bookmarkStart = _bookmarkMap[bookmarkName];
-            var element = bookmarkStart.NextSibling();
+            RemoveBookmark(start, end);
 
-            while (element != null && !(element is BookmarkEnd))
-            {
-                var nextElem = element.NextSibling();
-
-                element.Remove();
-                element = nextElem;
-            }
-
-            bookmarkStart.Parent.InsertAfter<Run>(new Run(new Text(text)), bookmarkStart);
+            var toInsert = new Run(new Text(text));
+            if (previous == null) parent.PrependChild(toInsert);
+            else parent.InsertAfter(toInsert, previous);
         }
 
         public void RemoveBookmark(string name)
         {
-            EnsureBookmarkMap();
+            if (!TryFindBookmark(name, out BookmarkStart start, out BookmarkEnd end)) return;
 
-            if (!_bookmarkMap.ContainsKey(name)) return;
-
-            throw new NotImplementedException();
+            RemoveBookmark(start, end);
         }
 
-        private IDictionary<string, BookmarkStart> _bookmarkMap;
-        private void EnsureBookmarkMap()
+        private static void RemoveBookmark(BookmarkStart start, BookmarkEnd end)
         {
-            if (_bookmarkMap != null) return;
+            while (start.NextSibling() != null || start.Parent.NextSibling() != null)
+            {
+                if (start.NextSibling() != null)
+                {
+                    var next = start.NextSibling();
+                    if (next is BookmarkEnd bookmarkEnd && bookmarkEnd.Id.Value == end.Id.Value)
+                    {
+                        next.Remove();
+                        break; // FOUND IT!
+                    }
 
-            _bookmarkMap = new Dictionary<string, BookmarkStart>();
+                    next.Remove();
+                }
+                else
+                {
+                    var nextParent = start.Parent.NextSibling();
+                    if (nextParent is BookmarkEnd bookmarkEnd && bookmarkEnd.Id.Value == end.Id.Value)
+                    {
+                        nextParent.Remove();
+                        break; // FOUND IT!
+                    }
+
+                    foreach (var child in nextParent.ChildElements)
+                    {
+                        var cloned = child.CloneNode(true);
+                        start.Parent.AppendChild(cloned);
+                    }
+
+                    nextParent.Remove();
+                }
+            }
+
+            start.Remove();
+        }
+
+        private bool TryFindBookmark(string name, out BookmarkStart start, out BookmarkEnd end)
+        {
+            start = null;
+            end = null;
+            string startId = null;
 
             foreach (var bookmarkStart in _innerDocument.MainDocumentPart.RootElement.Descendants<BookmarkStart>())
             {
-                _bookmarkMap.Add(bookmarkStart.Name, bookmarkStart);
+                if (bookmarkStart.Name == name)
+                {
+                    start = bookmarkStart;
+                    startId = bookmarkStart.Id;
+
+                    break;
+                }
             }
+
+            if (string.IsNullOrEmpty(startId))
+                return false;
+
+            foreach (var bookmarkEnd in _innerDocument.MainDocumentPart.RootElement.Descendants<BookmarkEnd>())
+            {
+                if (bookmarkEnd.Id == startId)
+                {
+                    end = bookmarkEnd;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public byte[] GetContent()
@@ -107,8 +156,6 @@ namespace DocumentTools.Word
 
                 if (start == null || target == null)
                     return; // Stop building table if start or end doesn't exist
-
-                Console.WriteLine("start & end have been found");
 
                 // Find matching parent...
                 var startRow = start.Parent<TableRow>();
@@ -193,7 +240,9 @@ namespace DocumentTools.Word
 
         public int GetNumberOfPages()
         {
-            return int.Parse(_innerDocument.ExtendedFilePropertiesPart.Properties.Pages.Text);
+            var pageCount = int.Parse(_innerDocument.ExtendedFilePropertiesPart.Properties.Pages.Text);
+
+            return pageCount;
         }
 
         public void Close()

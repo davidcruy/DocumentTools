@@ -14,10 +14,11 @@ namespace DocumentTools.Tests
             var inputContent = File.ReadAllBytes(Path.Combine(path, "sample.docx"));
             var wrapper = new DocxWrapper(inputContent);
 
-            Assert.AreEqual(wrapper.GetNumberOfPages(), 2);
+            Assert.AreEqual(2, wrapper.GetNumberOfPages());
 
             wrapper.ReplaceBookmark("ReplaceMe", "With me!");
             wrapper.ReplaceBookmark("ReplaceMe2", "With me too!");
+            wrapper.RemoveBookmark("RemoveMe");
 
             Assert.IsTrue(wrapper.HasMergeField("MergeMe"));
             Assert.IsFalse(wrapper.HasMergeField("IDontExist"));
